@@ -11,21 +11,39 @@ from random import choices
 from .ec2manager import Ec2Manager
 from .cloudfrontmanager import CloudfrontManager
 from .s3manager import S3Manager
+import sys
+print(sys.path)
+
+import deploy
+
 
 #   =	=	=	=	=	=	PARSE AWS CREDENTIALS FROM ~/.aws/config AND ~/.aws/credentials =	=	=	=	=	=	#
 #   =	=	=	=	=	=	So, you need to follow README and use aws configure :)			 =	=	=	=	=	=	#
 
+def get_profile_credentials(profile_name):
+    from configparser import ConfigParser
+    from configparser import ParsingError
+    from configparser import NoOptionError
+    from configparser import NoSectionError
+    from os import path
+    config = ConfigParser()
+    config.read([path.join(path.expanduser("~"),'.aws/credentials')])
+    try:
+        aws_access_key_id = config.get(profile_name, 'aws_access_key_id')
+        aws_secret_access_key = config.get(profile_name, 'aws_secret_access_key')
+    except ParsingError:
+        print('Error parsing config file')
+        raise
+    except (NoSectionError, NoOptionError):
+       try:
+           aws_access_key_id = config.get('default', 'aws_access_key_id')
+           aws_secret_access_key = config.get('default', 'aws_secret_access_key')
+       except (NoSectionError, NoOptionError):
+           print('Unable to find valid AWS credentials')
+           raise
+    return aws_access_key_id, aws_secret_access_key
 
-f = open(os.path.expanduser("~")+"/.aws/config", "r")
-c=f.readlines()[1].split('=')
-exec(c[0].strip()+'="'+c[1].strip()+'"')		#Define "region"
-f = open(os.path.expanduser("~")+"/.aws/credentials", "r")
-lines=f.readlines()
-c2=lines[1].split('=')
-exec(c2[0].strip()+'="'+c2[1].strip()+'"')		#Define "aws_access_key_id"
-c3=lines[2].split('=')
-exec(c3[0].strip()+'="'+c3[1].strip()+'"')		#Define "aws_secret_access_key"
-
+aws_access_key_id, aws_secret_access_key = get_profile_credentials("Default")
 
 #   =	=	=	=	=	=	EC2 =	=	=	=	=	=	#
 
@@ -56,57 +74,15 @@ def ec2_dashboard(request):
 	return render(request, 'ec2.html', {'all_instances': all_instances})
 
 def deploy_instance(aws_access_key_id, aws_secret_access_key, region):
-	"""
-	Deploys a functionnal Gophish on one or several EC2 instances
-	"""
-
-	ec2m = Ec2Manager()
-
-	#WORKS with SSM activated => you need to: create a role, create an activation, and associate the IAM role to your EC2 instance
-	"""
-	1. Create a role here https://console.aws.amazon.com/iam/home#/roles, that "Allows EC2 instances to call AWS services on your behalf." id est with AmazonSSMFullAccess & IAMReadOnlyAccess
-	2. In the "Instances" EC2 tab, click on the "Actions" button, then on "Instance parameters > Click/Attach the IAM Role", then chose the previous role
-	3. After several minutes, it appears here: https://eu-west-3.console.aws.amazon.com/ec2/home?region=eu-west-3#ManagedInstances:sort=InstanceId
-	"""
-	# 1. Create
-	# => https://stackoverflow.com/questions/47034797/invalidinstanceid-an-error-occurred-invalidinstanceid-when-calling-the-sendco/47036168#47036168?newreg=1bc535995fec49919b21385cd096935a
-	# It appears here then: https://eu-west-3.console.aws.amazon.com/ec2/home?region=eu-west-3#ManagedInstances:sort=InstanceId
-
-	group_name = "testgroup"	
-	#ec2m.create_ssh_enabled_security_group(ssh_enabled_security_group_name) #WORKS
-	key_name = str(uuid.uuid1()) #Generate a true unique name based on host mac and time (uuid1 is guarantee to generate no collision according to RFC4122
-	#ec2m.create_user_key_pair(key_name)
-	instance_profile_name = "ssm_instance_profile"
-	#instance_profile_name = "bidule"
-	role_name = "ssm_role"
-
-	# Creates the instance profile
-	print("=============== CREATING INSTANCE PROFILE ===============")
-	instance_profile_created = ec2m.create_instance_profile(instance_profile_name)
-	#=> output = [*] Using existing Instance Profile: ssm_instance_profile
-
-	# Creates the role with a AWSSSMFullAccess Policy
-	role_created = ec2m.create_ssm_role(role_name)
-	# Add the policies to the role
-	policy_attached_to_role = ec2m.attach_AmazonSSMFullAccess_to_ssm_role(role_name)
-	# Add the role to the instance profile
-	role_added_to_profile = ec2m.add_role_to_profile(instance_profile_name, role_name)
-
-	print("=============== CREATING INSTANCE ===============")
-	instance = ec2m.create_ec2_instance(group_name, key_name)
-	instance_id = instance[0].id
-
-	print("=============== LIST EXISTING ASSOCIATIONS ===============")
-	ec2m.get_associations()
-
-	print("=============== ASSOCIATES THE PROFILE TO OUR INSTANCE ===============")
-	instance_id = ec2m.associate_profile_to_ec2_instance(instance_id, instance_profile_name, role_name)
-	return instance_id
+	print(sys.path)
+	uuid = deploy.apply_deploy()
+	return uuid
 
 def deploy_ec2(request):
 	"""
 	Displays existing instances or deploys one
 	"""
+	region = "eu-west-3"
 	# if this is a POST request we need to process the form data
 	if request.method == 'POST':
 		#print("POSTed data:", request.body)
