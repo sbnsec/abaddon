@@ -29,7 +29,7 @@ def deploy_ec2(uuid, path):
 	if t.create_workspace(uuid)[0] != 0:
 		t.set_workspace(uuid)
 	t.apply(path, skip_plan=True ,capture_output=False)
-	return t.cmd('output -json public_ip | sed s/\"//g')
+	return t.cmd('output -json public_ip')[1].rstrip("\n").strip("\"") 
 
 def destroy_ec2(uuid, path):
 	print('------------- Destroying : ', uuid,' ----------------')
@@ -46,6 +46,9 @@ def apply_deploy():
 	ip = deploy_ec2(uuid, terraform_path)
 	with open('/tmp/'+uuid+".txt", 'r') as file:
 		password = file.read().replace('\n', '')
+	text_file = open(ip+"-gophish-pass.txt", "w")
+	n = text_file.write(password)
+	text_file.close()
 	print("Instance created, please connect on port 3333 using admin : "+password+" as credentials")
 	print("Once finished, destroy this instance unsing : python3 deploy.py -d "+uuid)
 
